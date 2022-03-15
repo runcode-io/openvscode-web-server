@@ -509,7 +509,6 @@ class DropOverlay extends Themable {
 		this.doPositionOverlay({ top: '0', left: '0', width: '100%', height: '100%' });
 		overlay.style.opacity = '0';
 		overlay.classList.remove('overlay-move-transition');
-		overlay.style.display = 'none';
 		// Reset current operation
 		this.currentDropOperation = undefined;
 	}
