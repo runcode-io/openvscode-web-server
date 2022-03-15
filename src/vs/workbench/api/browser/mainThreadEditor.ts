@@ -15,7 +15,7 @@ import { ISingleEditOperation } from 'vs/editor/common/core/editOperation';
 import { IModelService } from 'vs/editor/common/services/model';
 import { SnippetController2 } from 'vs/editor/contrib/snippet/browser/snippetController2';
 import { IApplyEditsOptions, IEditorPropertiesChangeData, IResolvedTextEditorConfiguration, ITextEditorConfigurationUpdate, IUndoStopOptions, TextEditorRevealType } from 'vs/workbench/api/common/extHost.protocol';
-import { IEditorPane } from 'vs/workbench/common/editor';
+import { IEditorControl } from 'vs/workbench/common/editor';
 import { withNullAsUndefined } from 'vs/base/common/types';
 import { equals } from 'vs/base/common/arrays';
 import { CodeEditorStateFlag, EditorState } from 'vs/editor/contrib/editorState/browser/editorState';
@@ -459,11 +459,8 @@ export class MainThreadTextEditor {
 		return false;
 	}
 
-	public matches(editor: IEditorPane): boolean {
-		if (!editor) {
-			return false;
-		}
-		return editor.getControl() === this._codeEditor;
+	public matches(editor: IEditorControl | undefined): boolean {
+		return !!editor && editor === this._codeEditor;
 	}
 
 	public applyEdits(versionIdCheck: number, edits: ISingleEditOperation[], opts: IApplyEditsOptions): boolean {

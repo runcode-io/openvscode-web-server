@@ -883,7 +883,7 @@ export class EditorPart extends Part implements IEditorGroupsService, IEditorGro
 	private setupDragAndDropSupport(parent: HTMLElement, container: HTMLElement): void {
 
 		// Editor drop target
-		this._register(this.createEditorDropTarget(container, Object.create(null)));
+		this._register(this.createEditorDropTarget(container, {}));
 
 		// No drop in the editor
 		const overlay = document.createElement('div');
@@ -893,10 +893,10 @@ export class EditorPart extends Part implements IEditorGroupsService, IEditorGro
 		// Hide the block if a mouse down event occurs #99065
 		this._register(addDisposableGenericMouseDownListener(overlay, () => overlay.classList.remove('visible')));
 
-		this._register(CompositeDragAndDropObserver.INSTANCE.registerTarget(this.element, {
-			onDragStart: e => overlay.classList.add('visible'),
-			onDragEnd: e => overlay.classList.remove('visible')
-		}));
+		// this._register(CompositeDragAndDropObserver.INSTANCE.registerTarget(this.element, {
+		// 	onDragStart: e => overlay.classList.add('visible'),
+		// 	onDragEnd: e => overlay.classList.remove('visible')
+		// }));
 
 		let horizontalOpenerTimeout: any;
 		let verticalOpenerTimeout: any;

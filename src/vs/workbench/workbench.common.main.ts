@@ -249,6 +249,9 @@ import 'vs/workbench/contrib/tasks/browser/task.contribution';
 import 'vs/workbench/contrib/remote/common/remote.contribution';
 import 'vs/workbench/contrib/remote/browser/remote.contribution';
 
+// Dnd
+import 'vs/workbench/contrib/dnd/browser/dnd.contribution';
+
 // Emmet
 import 'vs/workbench/contrib/emmet/browser/emmet.contribution';
 

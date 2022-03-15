@@ -422,6 +422,12 @@ const registry = Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Con
 				'tags': ['experimental'],
 				'default': 'both',
 				'description': localize('layoutControlType', "Controls whether the layout control in the custom title bar is displayed as a single menu button or with multiple UI toggles."),
+			},
+			'workbench.experimental.dragAndDropIntoEditor.enabled': {
+				'type': 'boolean',
+				'tags': ['experimental'],
+				'default': false,
+				'description': localize('dragAndDropIntoEditor', "Controls whether dragging and dropping a file into an editor (instead of opening the file in an editor) is enabled."),
 			}
 		}
 	});

@@ -10,8 +10,13 @@ import { ExtHostDocumentsAndEditors } from 'vs/workbench/api/common/extHostDocum
 import { ExtHostTextEditor, TextEditorDecorationType } from 'vs/workbench/api/common/extHostTextEditor';
 import * as TypeConverters from 'vs/workbench/api/common/extHostTypeConverters';
 import { TextEditorSelectionChangeKind } from 'vs/workbench/api/common/extHostTypes';
-import type * as vscode from 'vscode';
+import * as vscode from 'vscode';
 import { IExtensionDescription } from 'vs/platform/extensions/common/extensions';
+import { toDisposable } from 'vs/base/common/lifecycle';
+import { score } from 'vs/editor/common/languageSelector';
+import { DataTransferConverter, DataTransferDTO } from 'vs/workbench/api/common/shared/dataTransfer';
+import { CancellationToken } from 'vs/base/common/cancellation';
+import { IPosition } from 'vs/editor/common/core/position';
 
 export class ExtHostEditors implements ExtHostEditorsShape {
 
@@ -158,5 +163,39 @@ export class ExtHostEditors implements ExtHostEditorsShape {
 
 	getDiffInformation(id: string): Promise<vscode.LineChange[]> {
 		return Promise.resolve(this._proxy.$getDiffInformation(id));
+	}
+
+	// --- Text editor drag and drop
+
+	private readonly _dragAndDropControllers = new Map<number, { selector: vscode.DocumentSelector; controller: vscode.TextEditorDragAndDropController }>();
+	private handlePool = 1;
+
+	registerTextEditorDragAndDropController(extension: IExtensionDescription, selector: vscode.DocumentSelector, controller: vscode.TextEditorDragAndDropController): vscode.Disposable {
+		const handle = this.handlePool++;
+		this._dragAndDropControllers.set(handle, { selector, controller });
+
+		return toDisposable(() => {
+			this._dragAndDropControllers.delete(handle);
+		});
+	}
+
+	async $textEditorHandleDrop(id: string, position: IPosition, dataTransferDto: DataTransferDTO, token: CancellationToken): Promise<void> {
+		const textEditor = this._extHostDocumentsAndEditors.getEditor(id);
+		if (!textEditor) {
+			throw new Error('Unknown text editor');
+		}
+
+		const pos = TypeConverters.Position.to(position);
+		const dataTransfer = DataTransferConverter.toDataTransfer(dataTransferDto);
+
+		for (const { selector, controller } of this._dragAndDropControllers.values()) {
+			const s = score(TypeConverters.LanguageSelector.from(selector), textEditor.value.document.uri, textEditor.value.document.languageId, true, textEditor.value.document.notebook?.notebookType);
+			if (s > 0) {
+				await controller.handleDrop(textEditor.value, pos, dataTransfer, token);
+				if (token.isCancellationRequested) {
+					return;
+				}
+			}
+		}
 	}
 }

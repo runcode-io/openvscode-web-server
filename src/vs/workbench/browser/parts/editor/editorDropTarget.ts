@@ -21,9 +21,17 @@ import { IEditorService } from 'vs/workbench/services/editor/common/editorServic
 import { assertIsDefined, assertAllDefined } from 'vs/base/common/types';
 import { ITreeViewsService } from 'vs/workbench/services/views/browser/treeViewsService';
 import { isTemporaryWorkspace, IWorkspaceContextService } from 'vs/platform/workspace/common/workspace';
+import { IConfigurationService } from 'vs/platform/configuration/common/configuration';
 
 interface IDropOperation {
 	splitDirection?: GroupDirection;
+}
+
+function isDragIntoEditorEvent(configurationService: IConfigurationService, e: DragEvent): boolean {
+	if (!configurationService.getValue<boolean>('workbench.experimental.dragAndDropIntoEditor.enabled')) {
+		return false;
+	}
+	return e.shiftKey;
 }
 
 class DropOverlay extends Themable {
@@ -75,7 +83,9 @@ class DropOverlay extends Themable {
 		this.groupView.element.appendChild(container);
 		this.groupView.element.classList.add('dragged-over');
 		this._register(toDisposable(() => {
-			this.groupView.element.removeChild(container);
+			if (container.parentElement) {
+				this.groupView.element.removeChild(container);
+			}
 			this.groupView.element.classList.remove('dragged-over');
 		}));
 
@@ -109,6 +119,15 @@ class DropOverlay extends Themable {
 		this._register(new DragAndDropObserver(container, {
 			onDragEnter: e => undefined,
 			onDragOver: e => {
+				const isDragIntoEditor = this.instantiationService.invokeFunction(accessor => {
+					return isDragIntoEditorEvent(accessor.get(IConfigurationService), e);
+				});
+
+				if (isDragIntoEditor) {
+					this.dispose();
+					return;
+				}
+
 				const isDraggingGroup = this.groupTransfer.hasData(DraggedEditorGroupIdentifier.prototype);
 				const isDraggingEditor = this.editorTransfer.hasData(DraggedEditorIdentifier.prototype);
 
@@ -490,7 +509,7 @@ class DropOverlay extends Themable {
 		this.doPositionOverlay({ top: '0', left: '0', width: '100%', height: '100%' });
 		overlay.style.opacity = '0';
 		overlay.classList.remove('overlay-move-transition');
-
+		overlay.style.display = 'none';
 		// Reset current operation
 		this.currentDropOperation = undefined;
 	}
@@ -550,6 +569,14 @@ export class EditorDropTarget extends Themable {
 	}
 
 	private onDragEnter(event: DragEvent): void {
+		const isDragIntoEditor = this.instantiationService.invokeFunction(accessor => {
+			return isDragIntoEditorEvent(accessor.get(IConfigurationService), event);
+		});
+
+		if (isDragIntoEditor) {
+			return;
+		}
+
 		this.counter++;
 
 		// Validate transfer
