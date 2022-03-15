@@ -6,11 +6,48 @@
 declare module 'vscode' {
 
 	// https://github.com/microsoft/vscode/issues/142990
-	export interface TextEditorDragAndDropController {
-		handleDrop(editor: TextEditor, position: Position, dataTransfer: DataTransfer, token: CancellationToken): Thenable<void> | void;
+
+	export interface TextEditorDropEvent {
+		/**
+		 * The {@link TextEditor} the resource was dropped onto.
+		 */
+		readonly editor: TextEditor;
+
+		/**
+		 * The position in the file where the drop occurred
+		 */
+		readonly position: Position;
+
+		/**
+		 *  The {@link DataTransfer data transfer} associated with this drop.
+		 */
+		readonly dataTransfer: DataTransfer;
+
+		/**
+		 * Allows to pause the event to delay apply the drop.
+		 *
+		 * *Note:* This function can only be called during event dispatch and not
+		 * in an asynchronous manner:
+		 *
+		 * ```ts
+		 * workspace.onDidDropOnTextEditor(event => {
+		 * 	// async, will *throw* an error
+		 * 	setTimeout(() => event.waitUntil(promise));
+		 *
+		 * 	// sync, OK
+		 * 	event.waitUntil(promise);
+		 * })
+		 * ```
+		 *
+		 * @param thenable A thenable that delays saving.
+		 */
+		waitUntil(thenable: Thenable<any>): void;
 	}
 
-	export namespace window {
-		export function registerTextEditorDragAndDropController(selector: DocumentSelector, controller: TextEditorDragAndDropController): Disposable;
+	export namespace workspace {
+		/**
+		 * Event fired when the user drops a resource into a text editor.
+		 */
+		export const onDidDropOnTextEditor: Event<TextEditorDropEvent>;
 	}
 }

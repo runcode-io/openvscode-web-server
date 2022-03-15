@@ -5,10 +5,10 @@
 
 import { registerEditorContribution } from 'vs/editor/browser/editorExtensions';
 import { registerSingleton } from 'vs/platform/instantiation/common/extensions';
-import { DndEditorContribution } from 'vs/workbench/contrib/dnd/browser/dndEditorContribution';
-import { ITextEditorDragAndDropService, TextEditorDragAndDropService } from 'vs/workbench/contrib/dnd/browser/dndService';
+import { DropIntoEditorContribution } from 'vs/workbench/contrib/dropIntoEditor/browser/dndEditorContribution';
+import { IDropIntoEditorService, DropIntoEditorService } from 'vs/workbench/contrib/dropIntoEditor/browser/dndService';
 
 
-registerEditorContribution(DndEditorContribution.ID, DndEditorContribution);
+registerEditorContribution(DropIntoEditorContribution.ID, DropIntoEditorContribution);
 
-registerSingleton(ITextEditorDragAndDropService, TextEditorDragAndDropService, true);
+registerSingleton(IDropIntoEditorService, DropIntoEditorService, true);

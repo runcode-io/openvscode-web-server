@@ -12,11 +12,10 @@ import * as TypeConverters from 'vs/workbench/api/common/extHostTypeConverters';
 import { TextEditorSelectionChangeKind } from 'vs/workbench/api/common/extHostTypes';
 import * as vscode from 'vscode';
 import { IExtensionDescription } from 'vs/platform/extensions/common/extensions';
-import { toDisposable } from 'vs/base/common/lifecycle';
-import { score } from 'vs/editor/common/languageSelector';
 import { DataTransferConverter, DataTransferDTO } from 'vs/workbench/api/common/shared/dataTransfer';
 import { CancellationToken } from 'vs/base/common/cancellation';
 import { IPosition } from 'vs/editor/common/core/position';
+import { illegalState } from 'vs/base/common/errors';
 
 export class ExtHostEditors implements ExtHostEditorsShape {
 
@@ -26,6 +25,7 @@ export class ExtHostEditors implements ExtHostEditorsShape {
 	private readonly _onDidChangeTextEditorViewColumn = new Emitter<vscode.TextEditorViewColumnChangeEvent>();
 	private readonly _onDidChangeActiveTextEditor = new Emitter<vscode.TextEditor | undefined>();
 	private readonly _onDidChangeVisibleTextEditors = new Emitter<vscode.TextEditor[]>();
+	private readonly _onDidDropOnTextEditor = new Emitter<vscode.TextEditorDropEvent>();
 
 	readonly onDidChangeTextEditorSelection: Event<vscode.TextEditorSelectionChangeEvent> = this._onDidChangeTextEditorSelection.event;
 	readonly onDidChangeTextEditorOptions: Event<vscode.TextEditorOptionsChangeEvent> = this._onDidChangeTextEditorOptions.event;
@@ -33,6 +33,7 @@ export class ExtHostEditors implements ExtHostEditorsShape {
 	readonly onDidChangeTextEditorViewColumn: Event<vscode.TextEditorViewColumnChangeEvent> = this._onDidChangeTextEditorViewColumn.event;
 	readonly onDidChangeActiveTextEditor: Event<vscode.TextEditor | undefined> = this._onDidChangeActiveTextEditor.event;
 	readonly onDidChangeVisibleTextEditors: Event<vscode.TextEditor[]> = this._onDidChangeVisibleTextEditors.event;
+	readonly onDidDropOnTextEditor: Event<vscode.TextEditorDropEvent> = this._onDidDropOnTextEditor.event;
 
 	private readonly _proxy: MainThreadTextEditorsShape;
 
@@ -167,18 +168,6 @@ export class ExtHostEditors implements ExtHostEditorsShape {
 
 	// --- Text editor drag and drop
 
-	private readonly _dragAndDropControllers = new Map<number, { selector: vscode.DocumentSelector; controller: vscode.TextEditorDragAndDropController }>();
-	private handlePool = 1;
-
-	registerTextEditorDragAndDropController(extension: IExtensionDescription, selector: vscode.DocumentSelector, controller: vscode.TextEditorDragAndDropController): vscode.Disposable {
-		const handle = this.handlePool++;
-		this._dragAndDropControllers.set(handle, { selector, controller });
-
-		return toDisposable(() => {
-			this._dragAndDropControllers.delete(handle);
-		});
-	}
-
 	async $textEditorHandleDrop(id: string, position: IPosition, dataTransferDto: DataTransferDTO, token: CancellationToken): Promise<void> {
 		const textEditor = this._extHostDocumentsAndEditors.getEditor(id);
 		if (!textEditor) {
@@ -188,14 +177,29 @@ export class ExtHostEditors implements ExtHostEditorsShape {
 		const pos = TypeConverters.Position.to(position);
 		const dataTransfer = DataTransferConverter.toDataTransfer(dataTransferDto);
 
-		for (const { selector, controller } of this._dragAndDropControllers.values()) {
-			const s = score(TypeConverters.LanguageSelector.from(selector), textEditor.value.document.uri, textEditor.value.document.languageId, true, textEditor.value.document.notebook?.notebookType);
-			if (s > 0) {
-				await controller.handleDrop(textEditor.value, pos, dataTransfer, token);
-				if (token.isCancellationRequested) {
-					return;
+		const promises: Promise<any>[] = [];
+
+		const event = Object.freeze<vscode.TextEditorDropEvent>({
+			editor: textEditor.value,
+			position: pos,
+			dataTransfer: dataTransfer,
+			waitUntil: (p) => {
+				if (Object.isFrozen(promises)) {
+					throw illegalState('waitUntil can not be called async');
 				}
+				promises.push(Promise.resolve(p));
 			}
+		});
+
+		try {
+			this._onDidDropOnTextEditor.fire(event);
+		} catch (err) {
+			return Promise.reject(err);
 		}
+
+		// freeze promises after event call
+		Object.freeze(promises);
+
+		await Promise.all(promises);
 	}
 }

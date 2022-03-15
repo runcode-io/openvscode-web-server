@@ -12,12 +12,12 @@ import { IEditorContribution, ScrollType } from 'vs/editor/common/editorCommon';
 import { IModelDeltaDecoration } from 'vs/editor/common/model';
 import { ModelDecorationOptions } from 'vs/editor/common/model/textModel';
 import { DragAndDropObserver } from 'vs/workbench/browser/dnd';
-import { ITextEditorDragAndDropService } from 'vs/workbench/contrib/dnd/browser/dndService';
-import { ITextEditorDataTransfer, ITextEditorDataTransferItem } from 'vs/workbench/contrib/dnd/common/dataTransfer';
+import { IDropIntoEditorService } from 'vs/workbench/contrib/dropIntoEditor/browser/dndService';
+import { ITextEditorDataTransfer, ITextEditorDataTransferItem } from 'vs/workbench/contrib/dropIntoEditor/common/dataTransfer';
 
-export class DndEditorContribution extends Disposable implements IEditorContribution {
+export class DropIntoEditorContribution extends Disposable implements IEditorContribution {
 
-	static readonly ID: string = 'editor.contrib.dnd';
+	static readonly ID: string = 'editor.contrib.dropIntoEditor';
 
 	private static readonly DECORATION_OPTIONS = ModelDecorationOptions.register({
 		description: 'workbench-dnd-target',
@@ -28,7 +28,7 @@ export class DndEditorContribution extends Disposable implements IEditorContribu
 
 	constructor(
 		private readonly editor: ICodeEditor,
-		@ITextEditorDragAndDropService textEditorDragAndDropService: ITextEditorDragAndDropService,
+		@IDropIntoEditorService dropIntoEditorService: IDropIntoEditorService,
 	) {
 		super();
 
@@ -63,7 +63,7 @@ export class DndEditorContribution extends Disposable implements IEditorContribu
 					}
 
 					if (dataTransfer.size > 0) {
-						const controllers = textEditorDragAndDropService.getControllers(this.editor);
+						const controllers = dropIntoEditorService.getControllers(this.editor);
 						for (const controller of controllers) {
 							await controller.handleDrop(editor, target.position, dataTransfer, CancellationToken.None); // todo: add cancellation
 						}
@@ -82,7 +82,7 @@ export class DndEditorContribution extends Disposable implements IEditorContribu
 	private showAt(position: Position): void {
 		let newDecorations: IModelDeltaDecoration[] = [{
 			range: new Range(position.lineNumber, position.column, position.lineNumber, position.column),
-			options: DndEditorContribution.DECORATION_OPTIONS
+			options: DropIntoEditorContribution.DECORATION_OPTIONS
 		}];
 
 		this._dndDecorationIds = this.editor.deltaDecorations(this._dndDecorationIds, newDecorations);

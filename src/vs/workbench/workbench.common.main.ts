@@ -250,7 +250,7 @@ import 'vs/workbench/contrib/remote/common/remote.contribution';
 import 'vs/workbench/contrib/remote/browser/remote.contribution';
 
 // Dnd
-import 'vs/workbench/contrib/dnd/browser/dnd.contribution';
+import 'vs/workbench/contrib/dropIntoEditor/browser/dnd.contribution';
 
 // Emmet
 import 'vs/workbench/contrib/emmet/browser/emmet.contribution';

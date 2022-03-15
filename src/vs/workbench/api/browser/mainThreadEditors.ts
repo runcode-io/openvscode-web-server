@@ -30,7 +30,7 @@ import { NotebookDto } from 'vs/workbench/api/browser/mainThreadNotebookDto';
 import { ILineChange } from 'vs/editor/common/diff/diffComputer';
 import { IExtHostContext } from 'vs/workbench/services/extensions/common/extHostCustomers';
 import { IEditorControl } from 'vs/workbench/common/editor';
-import { ITextEditorDragAndDropService } from 'vs/workbench/contrib/dnd/browser/dndService';
+import { IDropIntoEditorService } from 'vs/workbench/contrib/dropIntoEditor/browser/dndService';
 import { ICodeEditor, isCodeEditor } from 'vs/editor/browser/editorBrowser';
 import { DataTransferConverter } from 'vs/workbench/api/common/shared/dataTransfer';
 
@@ -75,7 +75,7 @@ export class MainThreadTextEditors implements MainThreadTextEditorsShape {
 		@IBulkEditService private readonly _bulkEditService: IBulkEditService,
 		@IEditorService private readonly _editorService: IEditorService,
 		@IEditorGroupsService private readonly _editorGroupService: IEditorGroupsService,
-		@ITextEditorDragAndDropService private readonly _textEditorDragAndDropService: ITextEditorDragAndDropService
+		@IDropIntoEditorService private readonly _dropIntoEditorService: IDropIntoEditorService
 	) {
 		this._instanceId = String(++MainThreadTextEditors.INSTANCE_COUNT);
 		this._proxy = extHostContext.getProxy(ExtHostContext.ExtHostEditors);
@@ -87,7 +87,7 @@ export class MainThreadTextEditors implements MainThreadTextEditorsShape {
 		this._toDispose.add(this._editorGroupService.onDidRemoveGroup(() => this._updateActiveAndVisibleTextEditors()));
 		this._toDispose.add(this._editorGroupService.onDidMoveGroup(() => this._updateActiveAndVisibleTextEditors()));
 
-		this._toDispose.add(this._textEditorDragAndDropService.registerTextEditorDragAndDropController({
+		this._toDispose.add(this._dropIntoEditorService.registerTextEditorDragAndDropController({
 			handleDrop: async (editor: ICodeEditor, position, dataTransfer, token): Promise<void> => {
 				for (const pane of this._editorService.visibleEditorPanes) {
 					const control = pane.getControl();

@@ -34,7 +34,7 @@ import { LanguageService } from 'vs/editor/common/services/languageService';
 import { DisposableStore } from 'vs/base/common/lifecycle';
 import { LanguageFeatureDebounceService } from 'vs/editor/common/services/languageFeatureDebounce';
 import { LanguageFeaturesService } from 'vs/editor/common/services/languageFeaturesService';
-import { ITextEditorDragAndDropService } from 'vs/workbench/contrib/dnd/browser/dndService';
+import { IDropIntoEditorService } from 'vs/workbench/contrib/dropIntoEditor/browser/dndService';
 
 suite('MainThreadDocumentsAndEditors', () => {
 
@@ -94,7 +94,7 @@ suite('MainThreadDocumentsAndEditors', () => {
 			override onDidChangeFileSystemProviderRegistrations = Event.None;
 		};
 
-		const textEditorDragAndDrop = new class extends mock<ITextEditorDragAndDropService>() { };
+		const textEditorDragAndDrop = new class extends mock<IDropIntoEditorService>() { };
 
 		new MainThreadDocumentsAndEditors(
 			SingleProxyRPCProtocol(new class extends mock<ExtHostDocumentsAndEditorsShape>() {

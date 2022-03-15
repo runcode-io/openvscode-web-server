@@ -8,12 +8,15 @@ import { IDisposable, toDisposable } from 'vs/base/common/lifecycle';
 import { ICodeEditor } from 'vs/editor/browser/editorBrowser';
 import { Position } from 'vs/editor/common/core/position';
 import { createDecorator } from 'vs/platform/instantiation/common/instantiation';
-import { ITextEditorDataTransfer } from 'vs/workbench/contrib/dnd/common/dataTransfer';
+import { ITextEditorDataTransfer } from 'vs/workbench/contrib/dropIntoEditor/common/dataTransfer';
 
-export const ITextEditorDragAndDropService = createDecorator<ITextEditorDragAndDropService>('textEditorDragAndDropService');
+export interface TextEditorDragAndDropController {
+	handleDrop(editor: ICodeEditor, position: Position, source: ITextEditorDataTransfer, token: CancellationToken): Promise<void>;
+}
 
+export const IDropIntoEditorService = createDecorator<IDropIntoEditorService>('dropIntoEditorService');
 
-export interface ITextEditorDragAndDropService {
+export interface IDropIntoEditorService {
 	_serviceBrand: undefined;
 
 	registerTextEditorDragAndDropController(controller: TextEditorDragAndDropController): IDisposable;
@@ -21,11 +24,7 @@ export interface ITextEditorDragAndDropService {
 	getControllers(editor: ICodeEditor): TextEditorDragAndDropController[];
 }
 
-export interface TextEditorDragAndDropController {
-	handleDrop(editor: ICodeEditor, position: Position, source: ITextEditorDataTransfer, token: CancellationToken): Promise<void>;
-}
-
-export class TextEditorDragAndDropService implements ITextEditorDragAndDropService {
+export class DropIntoEditorService implements IDropIntoEditorService {
 
 	_serviceBrand: undefined;
 

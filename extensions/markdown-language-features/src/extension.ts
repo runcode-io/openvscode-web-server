@@ -48,9 +48,9 @@ export function activate(context: vscode.ExtensionContext) {
 		previewManager.updateConfiguration();
 	}));
 
-	context.subscriptions.push(vscode.window.registerTextEditorDragAndDropController({ language: 'markdown' }, {
-		handleDrop: async (editor: vscode.TextEditor, position: vscode.Position, source: vscode.DataTransfer<vscode.DataTransferItem>, _token: vscode.CancellationToken): Promise<void> => {
-			const resourceUrls = await source.get('resourceurls')?.asString();
+	context.subscriptions.push(vscode.workspace.onDidDropOnTextEditor(e => {
+		e.waitUntil((async () => {
+			const resourceUrls = await e.dataTransfer.get('resourceurls')?.asString();
 			if (!resourceUrls) {
 				return;
 			}
@@ -70,7 +70,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 			const snippet = new vscode.SnippetString();
 			uris.forEach((uri, i) => {
-				const rel = path.relative(URI.Utils.dirname(editor.document.uri).fsPath, uri.fsPath);
+				const rel = path.relative(URI.Utils.dirname(e.editor.document.uri).fsPath, uri.fsPath);
 
 				snippet.appendText('[');
 				snippet.appendTabstop();
@@ -81,8 +81,8 @@ export function activate(context: vscode.ExtensionContext) {
 				}
 			});
 
-			await editor.insertSnippet(snippet, position);
-		}
+			return e.editor.insertSnippet(snippet, e.position);
+		})());
 	}));
 }
 

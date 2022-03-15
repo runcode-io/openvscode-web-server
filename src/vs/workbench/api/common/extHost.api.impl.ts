@@ -757,10 +757,6 @@ export function createApiFactoryAndRegisterActors(accessor: ServicesAccessor): I
 				checkProposedApiEnabled(extension, 'inlineCompletions');
 				return InlineCompletionController.get(provider);
 			},
-			registerTextEditorDragAndDropController(selector: vscode.DocumentSelector, provider: vscode.TextEditorDragAndDropController): vscode.Disposable {
-				checkProposedApiEnabled(extension, 'textEditorDragAndDrop');
-				return extHostEditors.registerTextEditorDragAndDropController(extension, checkSelector(selector), provider);
-			},
 		};
 
 		// namespace: workspace
@@ -871,6 +867,10 @@ export function createApiFactoryAndRegisterActors(accessor: ServicesAccessor): I
 			},
 			onWillSaveTextDocument: (listener, thisArgs?, disposables?) => {
 				return extHostDocumentSaveParticipant.getOnWillSaveTextDocumentEvent(extension)(listener, thisArgs, disposables);
+			},
+			onDidDropOnTextEditor: (listener, thisArgs?, disposables?) => {
+				checkProposedApiEnabled(extension, 'textEditorDragAndDrop');
+				return extHostEditors.onDidDropOnTextEditor(listener, thisArgs, disposables);
 			},
 			get notebookDocuments(): vscode.NotebookDocument[] {
 				return extHostNotebook.notebookDocuments.map(d => d.apiNotebook);
