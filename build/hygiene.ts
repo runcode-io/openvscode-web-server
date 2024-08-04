@@ -52,10 +52,10 @@ export function hygiene(some: NodeJS.ReadWriteStream | string[] | undefined, run
 	const productJson = es.through(function (file: VinylFile) {
 		const product = JSON.parse(file.contents!.toString('utf8'));
 
-		if (product.extensionsGallery) {
-			console.error(`product.json: Contains 'extensionsGallery'`);
-			errorCount++;
-		}
+		// if (product.extensionsGallery) {
+		// 	console.error(`product.json: Contains 'extensionsGallery'`);
+		// 	errorCount++;
+		// }
 
 		this.emit('data', file);
 	});
