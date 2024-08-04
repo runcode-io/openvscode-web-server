@@ -1225,6 +1225,6 @@
 	},
 	"linkProtectionTrustedDomains": [
 		"https://open-vsx.org"
-	]
-
+	],
+	"quality": "insider"
 }
