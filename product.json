@@ -1057,5 +1057,5 @@
 	"linkProtectionTrustedDomains": [
 		"https://open-vsx.org"
 	],
-	"quality":"stable"
+	"quality": "insider"
 }

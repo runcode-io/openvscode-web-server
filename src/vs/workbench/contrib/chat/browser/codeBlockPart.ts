@@ -64,6 +64,7 @@ import { getSimpleEditorOptions } from 'vs/workbench/contrib/codeEditor/browser/
 import { IMarkdownVulnerability } from '../common/annotations';
 import { ResourceLabel } from 'vs/workbench/browser/labels';
 import { FileKind } from 'vs/platform/files/common/files';
+import { ResourceContextKey } from 'vs/workbench/common/contextkeys';
 
 const $ = dom.$;
 
@@ -146,6 +147,8 @@ export class CodeBlockPart extends Disposable {
 	private readonly disposableStore = this._register(new DisposableStore());
 	private isDisposed = false;
 
+	private resourceContextKey: ResourceContextKey;
+
 	constructor(
 		private readonly options: ChatEditorOptions,
 		readonly menuId: MenuId,
@@ -160,8 +163,9 @@ export class CodeBlockPart extends Disposable {
 		super();
 		this.element = $('.interactive-result-code-block');
 
+		this.resourceContextKey = this._register(instantiationService.createInstance(ResourceContextKey));
 		this.contextKeyService = this._register(contextKeyService.createScoped(this.element));
-		const scopedInstantiationService = instantiationService.createChild(new ServiceCollection([IContextKeyService, this.contextKeyService]));
+		const scopedInstantiationService = this._register(instantiationService.createChild(new ServiceCollection([IContextKeyService, this.contextKeyService])));
 		const editorElement = dom.append(this.element, $('.interactive-result-editor'));
 		this.editor = this.createEditor(scopedInstantiationService, editorElement, {
 			...getSimpleEditorOptions(this.configurationService),
@@ -191,7 +195,7 @@ export class CodeBlockPart extends Disposable {
 
 		const toolbarElement = dom.append(this.element, $('.interactive-result-code-block-toolbar'));
 		const editorScopedService = this.editor.contextKeyService.createScoped(toolbarElement);
-		const editorScopedInstantiationService = scopedInstantiationService.createChild(new ServiceCollection([IContextKeyService, editorScopedService]));
+		const editorScopedInstantiationService = this._register(scopedInstantiationService.createChild(new ServiceCollection([IContextKeyService, editorScopedService])));
 		this.toolbar = this._register(editorScopedInstantiationService.createInstance(MenuWorkbenchToolBar, toolbarElement, menuId, {
 			menuOptions: {
 				shouldForwardArgs: true
@@ -413,6 +417,7 @@ export class CodeBlockPart extends Disposable {
 			element: data.element,
 			languageId: textModel.getLanguageId()
 		} satisfies ICodeBlockActionContext;
+		this.resourceContextKey.set(textModel.uri);
 	}
 
 	private getVulnerabilitiesLabel(): string {
@@ -509,7 +514,7 @@ export class CodeCompareBlockPart extends Disposable {
 		this.messageElement.tabIndex = 0;
 
 		this.contextKeyService = this._register(contextKeyService.createScoped(this.element));
-		const scopedInstantiationService = instantiationService.createChild(new ServiceCollection([IContextKeyService, this.contextKeyService]));
+		const scopedInstantiationService = this._register(instantiationService.createChild(new ServiceCollection([IContextKeyService, this.contextKeyService])));
 		const editorHeader = dom.append(this.element, $('.interactive-result-header.show-file-icons'));
 		const editorElement = dom.append(this.element, $('.interactive-result-editor'));
 		this.diffEditor = this.createDiffEditor(scopedInstantiationService, editorElement, {
@@ -540,7 +545,7 @@ export class CodeCompareBlockPart extends Disposable {
 		this.resourceLabel = this._register(scopedInstantiationService.createInstance(ResourceLabel, editorHeader, { supportIcons: true }));
 
 		const editorScopedService = this.diffEditor.getModifiedEditor().contextKeyService.createScoped(editorHeader);
-		const editorScopedInstantiationService = scopedInstantiationService.createChild(new ServiceCollection([IContextKeyService, editorScopedService]));
+		const editorScopedInstantiationService = this._register(scopedInstantiationService.createChild(new ServiceCollection([IContextKeyService, editorScopedService])));
 		this.toolbar = this._register(editorScopedInstantiationService.createInstance(MenuWorkbenchToolBar, editorHeader, menuId, {
 			menuOptions: {
 				shouldForwardArgs: true
@@ -618,9 +623,16 @@ export class CodeCompareBlockPart extends Disposable {
 			diffAlgorithm: 'advanced',
 			readOnly: false,
 			isInEmbeddedEditor: true,
-			useInlineViewWhenSpaceIsLimited: false,
+			useInlineViewWhenSpaceIsLimited: true,
+			experimental: {
+				useTrueInlineView: true,
+			},
+			renderSideBySideInlineBreakpoint: 300,
+			renderOverviewRuler: false,
+			compactMode: true,
 			hideUnchangedRegions: { enabled: true, contextLineCount: 1 },
 			renderGutterMenu: false,
+			lineNumbersMinChars: 1,
 			...options
 		}, { originalEditor: widgetOptions, modifiedEditor: widgetOptions }));
 	}
@@ -778,6 +790,10 @@ export class CodeCompareBlockPart extends Disposable {
 			element: data.element,
 			diffEditor: this.diffEditor,
 		} satisfies ICodeCompareBlockActionContext;
+	}
+
+	clearModel() {
+		this.diffEditor.setModel(null);
 	}
 }
 

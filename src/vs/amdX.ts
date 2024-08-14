@@ -3,10 +3,11 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { isESM } from 'vs/base/common/amd';
+import { isESM, canASAR } from 'vs/base/common/amd';
 import { AppResourcePath, FileAccess, nodeModulesAsarPath, nodeModulesPath } from 'vs/base/common/network';
 import * as platform from 'vs/base/common/platform';
 import { IProductConfiguration } from 'vs/base/common/product';
+import { assertType } from 'vs/base/common/types';
 import { URI } from 'vs/base/common/uri';
 
 
@@ -187,7 +188,7 @@ export async function importAMDNodeModule<T>(nodeModuleName: string, pathInsideN
 			nodeModuleName = _paths[nodeModuleName];
 		}
 
-		const nodeModulePath = `${nodeModuleName}/${pathInsideNodeModule}`;
+		const nodeModulePath = pathInsideNodeModule ? `${nodeModuleName}/${pathInsideNodeModule}` : nodeModuleName;
 		if (cache.has(nodeModulePath)) {
 			return cache.get(nodeModulePath)!;
 		}
@@ -197,7 +198,7 @@ export async function importAMDNodeModule<T>(nodeModuleName: string, pathInsideN
 			// bit of a special case for: src/vs/workbench/services/languageDetection/browser/languageDetectionSimpleWorker.ts
 			scriptSrc = nodeModulePath;
 		} else {
-			const useASAR = (isBuilt && !platform.isWeb);
+			const useASAR = (canASAR && isBuilt && !platform.isWeb);
 			const actualNodeModulesPath = (useASAR ? nodeModulesAsarPath : nodeModulesPath);
 			const resourcePath: AppResourcePath = `${actualNodeModulesPath}/${nodeModulePath}`;
 			scriptSrc = FileAccess.asBrowserUri(resourcePath).toString(true);
@@ -208,4 +209,17 @@ export async function importAMDNodeModule<T>(nodeModuleName: string, pathInsideN
 	} else {
 		return await import(nodeModuleName);
 	}
+}
+
+export function resolveAmdNodeModulePath(nodeModuleName: string, pathInsideNodeModule: string): string {
+	assertType(isESM);
+
+	const product = globalThis._VSCODE_PRODUCT_JSON as unknown as IProductConfiguration;
+	const isBuilt = Boolean((product ?? (<any>globalThis).vscode?.context?.configuration()?.product)?.commit);
+	const useASAR = (canASAR && isBuilt && !platform.isWeb);
+
+	const nodeModulePath = `${nodeModuleName}/${pathInsideNodeModule}`;
+	const actualNodeModulesPath = (useASAR ? nodeModulesAsarPath : nodeModulesPath);
+	const resourcePath: AppResourcePath = `${actualNodeModulesPath}/${nodeModulePath}`;
+	return FileAccess.asBrowserUri(resourcePath).toString(true);
 }
