@@ -352,7 +352,9 @@ export class WebClientServer {
 			scopes: [['user:email'], ['repo']]
 		} : undefined;
 
+		const { _serviceBrand: _b, ...baseProduct } = this._productService;
 		const productConfiguration: Partial<Mutable<IProductConfiguration>> = {
+			...baseProduct,
 			embedderIdentifier: 'server-distro',
 			extensionsGallery: this._webExtensionResourceUrlTemplate && this._productService.extensionsGallery ? {
 				...this._productService.extensionsGallery,

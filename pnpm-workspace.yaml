@@ -1,0 +1,26 @@
+allowBuilds:
+  '@bazel/concatjs': set this to true or false
+  '@parcel/watcher': set this to true or false
+  '@playwright/browser-chromium': set this to true or false
+  '@vscode/deviceid': set this to true or false
+  '@vscode/native-watchdog': set this to true or false
+  '@vscode/policy-watcher': set this to true or false
+  '@vscode/spdlog': set this to true or false
+  '@vscode/sqlite3': set this to true or false
+  '@vscode/windows-mutex': set this to true or false
+  '@vscode/windows-process-tree': set this to true or false
+  '@vscode/windows-registry': set this to true or false
+  bufferutil: set this to true or false
+  cpu-features: set this to true or false
+  electron: set this to true or false
+  es5-ext: set this to true or false
+  esbuild: set this to true or false
+  husky: set this to true or false
+  kerberos: set this to true or false
+  native-is-elevated: set this to true or false
+  native-keymap: set this to true or false
+  node-pty: set this to true or false
+  protobufjs: set this to true or false
+  ssh2: set this to true or false
+  utf-8-validate: set this to true or false
+  windows-foreground-love: set this to true or false
