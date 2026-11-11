@@ -5,7 +5,7 @@
 
 import es from 'event-stream';
 import fs from 'fs';
-import { gulp, bom, sourcemaps } from './gulp/facade.ts';
+import { gulp, bom, replace, sourcemaps } from './gulp/facade.ts';
 import path from 'path';
 import * as monacodts from './monaco-api.ts';
 import * as nls from './nls.ts';
@@ -23,7 +23,6 @@ import { createTsgoStream, spawnTsgo } from './tsgo.ts';
 import { apiProposalNamesSource, checkApiProposalNames, generateApiProposalNames } from './apiProposalNames.ts';
 import packageJson from '../../package.json' with { type: 'json' };
 import productJson from '../../product.json' with { type: 'json' };
-import replace from 'gulp-replace';
 
 
 import { extractExtensionPointNamesFromFile } from './extractExtensionPoints.ts';

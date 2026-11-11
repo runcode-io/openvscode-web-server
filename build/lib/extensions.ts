@@ -562,11 +562,22 @@ export function packageCopilotExtensionStream(): Stream {
 	const productionDependencies = getProductionDependencies('extensions/copilot');
 	const dependenciesSrc = productionDependencies.map(d => path.relative(root, d)).map(d => [`${d}/**`, `!${d}/**/{test,tests}/**`]).flat();
 
+	// build/.moduleignore strips @github/copilot/** from every package, but the built-in extension
+	// needs its Copilot CLI SDK (prepareBuiltInCopilotRipgrepShim fails without sdk/). CI never
+	// hits this because it ships the prebuilt Copilot VSIX instead of building from source, so
+	// re-add exactly the @github/copilot files that VSIX keeps, as listed in its .vscodeignore.
+	const copilotCliSrc = fs.readFileSync(path.join(extensionPath, '.vscodeignore'), 'utf8')
+		.split(/\r?\n/g)
+		.map(line => line.trim())
+		.filter(line => line.startsWith('!node_modules/@github/copilot/'))
+		.map(line => `extensions/copilot/${line.slice(1)}`);
+
 	return es.merge(
 		localExtensionsStream,
 		gulp.src(dependenciesSrc, { base: '.' })
 			.pipe(util2.cleanNodeModules(path.join(root, 'build', '.moduleignore')))
-			.pipe(util2.cleanNodeModules(path.join(root, 'build', `.moduleignore.${process.platform}`)))
+			.pipe(util2.cleanNodeModules(path.join(root, 'build', `.moduleignore.${process.platform}`))),
+		gulp.src(copilotCliSrc, { base: '.', dot: true, allowEmpty: true })
 	).pipe(util2.setExecutableBit(['**/*.sh']));
 }
 
