@@ -4,8 +4,9 @@
  *--------------------------------------------------------------------------------------------*/
 
 import assert from 'assert';
+import sinon from 'sinon';
 import { Emitter } from '../../../../../base/common/event.js';
-import { DisposableStore } from '../../../../../base/common/lifecycle.js';
+import { DisposableStore, IDisposable, toDisposable } from '../../../../../base/common/lifecycle.js';
 import { constObservable, observableValue } from '../../../../../base/common/observable.js';
 import { URI } from '../../../../../base/common/uri.js';
 import { Codicon } from '../../../../../base/common/codicons.js';
@@ -14,9 +15,10 @@ import { IConfigurationService } from '../../../../../platform/configuration/com
 import { TestConfigurationService } from '../../../../../platform/configuration/test/common/testConfigurationService.js';
 import { TestInstantiationService } from '../../../../../platform/instantiation/test/common/instantiationServiceMock.js';
 import { ILogService, NullLogService } from '../../../../../platform/log/common/log.js';
-import { LOCAL_AGENT_HOST_PROVIDER_ID } from '../../../../common/agentHostSessionsProvider.js';
-import { IChat, ISession, ISessionWorkspace, SessionStatus } from '../../../../services/sessions/common/session.js';
-import { ISessionsChangeEvent, ISessionsManagementService } from '../../../../services/sessions/common/sessionsManagement.js';
+import { LOCAL_AGENT_HOST_PROVIDER_ID } from '../../../../../workbench/contrib/sessions/common/agentHostSessionsProvider.js';
+import { TaskSettingId } from '../../../../../workbench/contrib/tasks/common/tasks.js';
+import { IChat, ISession, ISessionWorkspace, SessionStatus } from '../../../../../workbench/services/sessions/common/session.js';
+import { ISessionsChangeEvent, ISessionsManagementService } from '../../../../../workbench/contrib/sessions/common/sessionsManagement.js';
 import { ISessionsTasksService, ISessionTaskWithTarget, ITaskEntry } from '../../browser/sessionsTasksService.js';
 import { AGENT_HOST_RUN_WORKTREE_CREATED_TASKS_SETTING, WorktreeCreatedTaskDispatcher } from '../../browser/worktreeCreatedTaskDispatcher.js';
 
@@ -25,6 +27,7 @@ interface ITestSession {
 	readonly loading: ReturnType<typeof observableValue<boolean>>;
 	readonly status: ReturnType<typeof observableValue<SessionStatus>>;
 	readonly workspace: ReturnType<typeof observableValue<ISessionWorkspace | undefined>>;
+	readonly isArchived: ReturnType<typeof observableValue<boolean>>;
 }
 
 function makeWorkspace(hasWorktree: boolean): ISessionWorkspace {
@@ -50,32 +53,34 @@ function makeSession(opts: { id?: string; providerId?: string; runsWorktreeCreat
 	const loading = observableValue('loading', opts.loading ?? false);
 	const status = observableValue('status', opts.status ?? SessionStatus.InProgress);
 	const workspace = observableValue<ISessionWorkspace | undefined>('workspace', makeWorkspace(opts.hasWorktree ?? true));
+	const isArchived = observableValue('isArchived', false);
 	const chat = { resource: URI.parse('file:///session') } as IChat;
 	const session: ISession = {
 		sessionId: opts.id ?? 'test:session',
 		resource: chat.resource,
 		providerId: opts.providerId ?? 'test',
 		sessionType: 'background',
+		harness: 'copilot',
+		environment: 'local',
+		application: constObservable({ id: 'vscode', label: 'VS Code' }),
 		icon: Codicon.copilot,
 		createdAt: new Date(),
 		workspace,
 		title: observableValue('title', 'session'),
 		updatedAt: observableValue('updatedAt', new Date()),
 		status,
-		changesets: constObservable([]),
-		changes: constObservable([]),
 		modelId: observableValue('modelId', undefined),
 		mode: observableValue('mode', undefined),
 		loading,
-		isArchived: observableValue('isArchived', false),
+		isArchived,
 		isRead: observableValue('isRead', true),
 		lastTurnEnd: observableValue('lastTurnEnd', undefined),
 		description: observableValue('description', undefined),
 		chats: observableValue('chats', [chat]),
 		mainChat: constObservable(chat),
-		capabilities: { supportsMultipleChats: false, runsWorktreeCreatedTasks: opts.runsWorktreeCreatedTasks },
+		capabilities: constObservable({ supportsMultipleChats: false, runsWorktreeCreatedTasks: opts.runsWorktreeCreatedTasks }),
 	};
-	return { session, loading, status, workspace };
+	return { session, loading, status, workspace, isArchived };
 }
 
 function entry(label: string, runOn?: 'worktreeCreated' | 'folderOpen' | 'default'): ISessionTaskWithTarget {
@@ -91,6 +96,7 @@ function entry(label: string, runOn?: 'worktreeCreated' | 'folderOpen' | 'defaul
 class FakeSessionsTasksService implements Partial<ISessionsTasksService> {
 	declare readonly _serviceBrand: undefined;
 	readonly ranTasks: { label: string; sessionId: string }[] = [];
+	readonly stoppedTasks: { label: string; sessionId: string }[] = [];
 	private readonly _tasks = new Map<string, readonly ISessionTaskWithTarget[]>();
 	runTaskFails = false;
 
@@ -102,11 +108,12 @@ class FakeSessionsTasksService implements Partial<ISessionsTasksService> {
 		return this._tasks.get(session.sessionId) ?? [];
 	}
 
-	async runTask(task: ITaskEntry, session: ISession): Promise<void> {
+	async runTask(task: ITaskEntry, session: ISession): Promise<IDisposable | undefined> {
 		this.ranTasks.push({ label: task.label, sessionId: session.sessionId });
 		if (this.runTaskFails) {
 			throw new Error('simulated launch failure');
 		}
+		return toDisposable(() => this.stoppedTasks.push({ label: task.label, sessionId: session.sessionId }));
 	}
 }
 
@@ -138,10 +145,11 @@ suite('WorktreeCreatedTaskDispatcher', () => {
 	setup(() => {
 		tasks = new FakeSessionsTasksService();
 		mgmt = new FakeSessionsManagementService();
-		configurationService = new TestConfigurationService();
+		configurationService = new TestConfigurationService({ [TaskSettingId.AllowAutomaticTasks]: 'on' });
 	});
 
 	teardown(() => {
+		sinon.restore();
 		mgmt.sessionStartedEmitter.dispose();
 		mgmt.sessionsChangedEmitter.dispose();
 		store.clear();
@@ -268,6 +276,55 @@ suite('WorktreeCreatedTaskDispatcher', () => {
 		assert.deepStrictEqual(tasks.ranTasks, []);
 	});
 
+	for (const providerId of ['test', LOCAL_AGENT_HOST_PROVIDER_ID]) {
+		for (const automaticTasks of ['off', undefined, 'invalid']) {
+			test(`skips automatic tasks for ${providerId} when allowAutomaticTasks is ${automaticTasks}`, async () => {
+				await configurationService.setUserConfiguration(TaskSettingId.AllowAutomaticTasks, automaticTasks);
+				await configurationService.setUserConfiguration(AGENT_HOST_RUN_WORKTREE_CREATED_TASKS_SETTING, true);
+				createDispatcher();
+				const { session } = makeSession({ providerId });
+				tasks.setTasks(session.sessionId, [entry('setup', 'worktreeCreated')]);
+
+				mgmt.sessionStartedEmitter.fire(session);
+				await settle();
+
+				assert.deepStrictEqual(tasks.ranTasks, []);
+			});
+		}
+	}
+
+	test('checks automatic task permission after task discovery', async () => {
+		createDispatcher();
+		const { session } = makeSession();
+		sinon.stub(tasks, 'getSessionTasksOnce').callsFake(async () => {
+			await configurationService.setUserConfiguration(TaskSettingId.AllowAutomaticTasks, 'off');
+			return [entry('setup', 'worktreeCreated')];
+		});
+
+		mgmt.sessionStartedEmitter.fire(session);
+		await settle();
+
+		assert.deepStrictEqual(tasks.ranTasks, []);
+	});
+
+	test('stops dispatching when automatic tasks are disabled between launches', async () => {
+		createDispatcher();
+		const { session } = makeSession();
+		tasks.setTasks(session.sessionId, [
+			entry('setup-a', 'worktreeCreated'),
+			entry('setup-b', 'worktreeCreated'),
+		]);
+		const runTask = sinon.stub(tasks, 'runTask').callsFake(async () => {
+			await configurationService.setUserConfiguration(TaskSettingId.AllowAutomaticTasks, 'off');
+			return undefined;
+		});
+
+		mgmt.sessionStartedEmitter.fire(session);
+		await settle();
+
+		assert.deepStrictEqual(runTask.getCalls().map(call => call.args[0].label), ['setup-a']);
+	});
+
 	test('runs agent host sessions when the setting is enabled', async () => {
 		await configurationService.setUserConfiguration(AGENT_HOST_RUN_WORKTREE_CREATED_TASKS_SETTING, true);
 		createDispatcher();
@@ -291,5 +348,53 @@ suite('WorktreeCreatedTaskDispatcher', () => {
 		await settle();
 
 		assert.deepStrictEqual(tasks.ranTasks, [{ label: 'setup', sessionId: 'a' }]);
+	});
+
+	test('stops dispatched tasks when the session is marked done (archived)', async () => {
+		createDispatcher();
+		const { session, workspace, isArchived } = makeSession({ id: 'a', hasWorktree: false });
+		tasks.setTasks(session.sessionId, [entry('setup', 'worktreeCreated')]);
+
+		mgmt.sessionStartedEmitter.fire(session);
+		workspace.set(makeWorkspace(true), undefined);
+		await settle();
+		assert.deepStrictEqual(tasks.stoppedTasks, []);
+
+		isArchived.set(true, undefined);
+		await settle();
+
+		assert.deepStrictEqual(tasks.stoppedTasks, [{ label: 'setup', sessionId: 'a' }]);
+	});
+
+	test('stops dispatched tasks when a started session is removed', async () => {
+		createDispatcher();
+		const { session, workspace } = makeSession({ id: 'a', hasWorktree: false });
+		tasks.setTasks(session.sessionId, [entry('setup', 'worktreeCreated')]);
+
+		mgmt.sessionStartedEmitter.fire(session);
+		workspace.set(makeWorkspace(true), undefined);
+		await settle();
+		assert.deepStrictEqual(tasks.ranTasks, [{ label: 'setup', sessionId: 'a' }]);
+
+		mgmt.sessionsChangedEmitter.fire({ added: [], removed: [session], changed: [] });
+		await settle();
+
+		assert.deepStrictEqual(tasks.stoppedTasks, [{ label: 'setup', sessionId: 'a' }]);
+	});
+
+	test('stops a task that finishes launching after the session is archived', async () => {
+		createDispatcher();
+		const { session, workspace, isArchived } = makeSession({ id: 'a', hasWorktree: false });
+		tasks.setTasks(session.sessionId, [entry('setup', 'worktreeCreated')]);
+
+		mgmt.sessionStartedEmitter.fire(session);
+		// Archive before the worktree appears so the task is launched against an
+		// already-archived session.
+		isArchived.set(true, undefined);
+		workspace.set(makeWorkspace(true), undefined);
+		await settle();
+
+		assert.deepStrictEqual(tasks.ranTasks, [{ label: 'setup', sessionId: 'a' }]);
+		assert.deepStrictEqual(tasks.stoppedTasks, [{ label: 'setup', sessionId: 'a' }]);
 	});
 });

@@ -6,22 +6,39 @@
 import { Codicon } from '../../../../base/common/codicons.js';
 import { URI } from '../../../../base/common/uri.js';
 import { localize, localize2 } from '../../../../nls.js';
-import { Action2, MenuId, registerAction2 } from '../../../../platform/actions/common/actions.js';
+import { Action2, registerAction2 } from '../../../../platform/actions/common/actions.js';
 import { ContextKeyExpr } from '../../../../platform/contextkey/common/contextkey.js';
 import { InstantiationType, registerSingleton } from '../../../../platform/instantiation/common/extensions.js';
 import { ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
-import { IsSessionsWindowContext } from '../../../../workbench/common/contextkeys.js';
-import { IsPhoneLayoutContext, ActiveSessionWorkspaceIsVirtualContext, ChatSessionProviderIdContext } from '../../../common/contextkeys.js';
+import { ActiveEditorContext, IsSessionsWindowContext, IsTopRightEditorGroupContext } from '../../../../workbench/common/contextkeys.js';
+import { SessionHasChangesContext, SessionIsCreatedContext, SessionWorkspaceIsVirtualContext, DesktopLayoutContext } from '../../../../workbench/contrib/sessions/common/contextkeys.js';
 import { ChatContextKeys } from '../../../../workbench/contrib/chat/common/actions/chatContextKeys.js';
 import { CHAT_CATEGORY } from '../../../../workbench/contrib/chat/browser/actions/chatActions.js';
-import { ISessionsManagementService } from '../../../services/sessions/common/sessionsManagement.js';
-import { CodeReviewService, ICodeReviewService } from './codeReviewService.js';
+import { SessionStatus } from '../../../../workbench/services/sessions/common/session.js';
+import { ISessionsManagementService } from '../../../../workbench/contrib/sessions/common/sessionsManagement.js';
+import { resolveSessionCommandTarget } from '../../../../workbench/contrib/sessions/browser/sessionCommandTarget.js';
+import { CodeReviewService } from './codeReviewService.js';
+import { ICodeReviewService } from '../../../../workbench/contrib/sessions/browser/codeReviewService.js';
 import { IChatWidgetService } from '../../../../workbench/contrib/chat/browser/chat.js';
-import { ANY_AGENT_HOST_PROVIDER_RE } from '../../../common/agentHostSessionsProvider.js';
+import { Menus } from '../../../../workbench/contrib/sessions/browser/menus.js';
+import { SessionChangesEditorInput } from '../../../../workbench/contrib/sessionChanges/browser/sessionChangesEditorInput.js';
+import { ISessionChangesService } from '../../../../workbench/contrib/sessionChanges/browser/sessionChangesService.js';
 
 registerSingleton(ICodeReviewService, CodeReviewService, InstantiationType.Delayed);
 
 const CODE_REVIEW_QUERY = '/code-review';
+
+const desktopDetailPanel = DesktopLayoutContext;
+
+const desktopCodeReviewWhen = ContextKeyExpr.and(
+	IsSessionsWindowContext,
+	ActiveEditorContext.isEqualTo(SessionChangesEditorInput.EDITOR_ID),
+	desktopDetailPanel,
+	IsTopRightEditorGroupContext,
+	SessionWorkspaceIsVirtualContext.toNegated(),
+	SessionIsCreatedContext,
+	SessionHasChangesContext,
+);
 
 class RunSessionCodeReviewAction extends Action2 {
 
@@ -34,30 +51,28 @@ class RunSessionCodeReviewAction extends Action2 {
 			tooltip: localize('sessions.runCodeReview.tooltip', "Run Code Review"),
 			category: CHAT_CATEGORY,
 			icon: Codicon.codeReview,
-			precondition: ChatContextKeys.hasAgentSessionChanges,
-			menu: [
-				{
-					id: MenuId.AgentsChangesToolbar,
-					group: 'navigation',
-					order: 7,
-					when: ContextKeyExpr.and(
-						IsSessionsWindowContext,
-						ActiveSessionWorkspaceIsVirtualContext.toNegated(),
-						IsPhoneLayoutContext.negate(),
-						ContextKeyExpr.regex(ChatSessionProviderIdContext.key, ANY_AGENT_HOST_PROVIDER_RE),
-					),
-				},
-			],
+			precondition: ContextKeyExpr.or(ChatContextKeys.hasAgentSessionChanges, SessionHasChangesContext),
+			menu: {
+				// First in the header row of the Changes editor, before the More Actions menu of its diff actions.
+				id: Menus.SessionsEditorHeaderSecondary,
+				group: 'navigation',
+				order: 10,
+				when: desktopCodeReviewWhen,
+			},
 		});
 	}
 
 	override async run(accessor: ServicesAccessor, sessionResource?: URI): Promise<void> {
 		const sessionManagementService = accessor.get(ISessionsManagementService);
 		const chatWidgetService = accessor.get(IChatWidgetService);
+		const sessionChangesService = accessor.get(ISessionChangesService);
 
-		const resource = URI.isUri(sessionResource)
+		const candidateResource = URI.isUri(sessionResource)
 			? sessionResource
-			: sessionManagementService.activeSession.get()?.resource;
+			: resolveSessionCommandTarget(accessor, [])?.session?.resource;
+		const resource = candidateResource
+			? sessionChangesService.getSessionResource(candidateResource) ?? candidateResource
+			: undefined;
 		if (!resource) {
 			return;
 		}
@@ -67,8 +82,17 @@ class RunSessionCodeReviewAction extends Action2 {
 			return;
 		}
 
-		if (session.capabilities.supportsMultipleChats) {
-			await sessionManagementService.sendNewChatRequest(session, { query: CODE_REVIEW_QUERY });
+		if (session.capabilities.get().supportsMultipleChats) {
+			if (session.status.get() === SessionStatus.Untitled) {
+				await sessionManagementService.sendNewChatRequest(session, { query: CODE_REVIEW_QUERY });
+			} else {
+				// sendNewChatRequest only starts pending sessions; an existing session gets a new chat instead.
+				// forceNew keeps any unsent draft chat (and its composed input) untouched.
+				const chat = await sessionManagementService.createNewChatInSession(session, { forceNew: true });
+				if (chat) {
+					await sessionManagementService.sendRequest(session, chat, { query: CODE_REVIEW_QUERY });
+				}
+			}
 		} else {
 			chatWidgetService.getWidgetBySessionResource(session.resource)?.acceptInput(CODE_REVIEW_QUERY);
 		}

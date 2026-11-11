@@ -2,23 +2,47 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import elkLayouts from '@mermaid-js/layout-elk';
 import tidyTreeLayouts from '@mermaid-js/layout-tidy-tree';
 import zenuml from '@mermaid-js/mermaid-zenuml';
 import mermaid, { MermaidConfig } from 'mermaid';
 import { iconPacks } from './iconPackConfig';
 import { ClickDragMode, MermaidExtensionConfig, ShowControlsMode } from './config';
+import { subgraphTitleMargin } from './subgraphTitles';
 import { vsCodeMermaidTheme, VsCodeMermaidThemeTracker } from './vsCodeTheme';
 
 /**
  * Creates the `<pre class="mermaid-error">` node shown when a diagram fails to render.
  */
 export function createMermaidErrorElement(error: unknown): HTMLElement {
-	const message = error instanceof Error ? error.message : String(error);
 	const errorMessageNode = document.createElement('pre');
 	errorMessageNode.className = 'mermaid-error';
-	errorMessageNode.innerText = message;
+	errorMessageNode.innerText = getErrorMessage(error);
 	return errorMessageNode;
+}
+
+/**
+ * Extracts a human readable message from a thrown value.
+ *
+ * Mermaid rejects parse/render failures with a plain object of the shape
+ * `{ str, message, hash, error }` rather than a real `Error` instance, so a naive
+ * `String(error)` renders the unhelpful `[object Object]` instead of the actual
+ * syntax error. Prefer a `message` (or Mermaid's `str`) property when present
+ * before falling back.
+ */
+function getErrorMessage(error: unknown): string {
+	if (error instanceof Error) {
+		return error.message;
+	}
+	if (error && typeof error === 'object') {
+		const candidate = error as { message?: unknown; str?: unknown };
+		if (typeof candidate.message === 'string' && candidate.message) {
+			return candidate.message;
+		}
+		if (typeof candidate.str === 'string' && candidate.str) {
+			return candidate.str;
+		}
+	}
+	return String(error);
 }
 
 /**
@@ -128,7 +152,6 @@ export async function renderMermaidBlocksInElement(
 
 export async function registerMermaidAddons() {
 	mermaid.registerIconPacks(iconPacks);
-	mermaid.registerLayoutLoaders(elkLayouts);
 	mermaid.registerLayoutLoaders(tidyTreeLayouts);
 	await mermaid.registerExternalDiagrams([zenuml]);
 }
@@ -163,6 +186,8 @@ export function buildMermaidConfig(
 ): MermaidConfig {
 	return {
 		startOnLoad: false,
+		look: 'classic',
+		flowchart: { subGraphTitleMargin: { ...subgraphTitleMargin } },
 		...vsCodeThemeTracker.resolveMermaidTheme(extensionConfig),
 	};
 }

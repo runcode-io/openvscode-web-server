@@ -3,10 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Emitter, Event } from '../../../base/common/event.js';
-import { ILogService } from '../../log/common/log.js';
-import { ISharedProcessTunnelProxyService, ITunnelProxyInfo } from '../../tunnel/common/sharedProcessTunnelProxyService.js';
-import { BrowserViewStorageScope } from '../common/browserView.js';
+import { ITunnelProxyInfo } from '../../tunnel/common/tunnelProxy.js';
 import type { BrowserSession } from './browserSession.js';
 
 /**
@@ -15,95 +12,54 @@ import type { BrowserSession } from './browserSession.js';
  * to acquire/release the tunnel proxy or read its current info.
  */
 export interface IBrowserSessionRemote {
-	/**
-	 * Fires when the session's tunnel proxy becomes active, i.e. the
-	 * first {@link acquire} sets {@link proxyId}.
-	 */
-	readonly onDidStart: Event<void>;
-	/**
-	 * Fires when the session's tunnel proxy is torn down, i.e. the last
-	 * reference is released (or the proxy failed to start) and
-	 * {@link proxyId} is cleared.
-	 */
-	readonly onDidStop: Event<void>;
-	/**
-	 * Opaque id of the shared-process proxy this session is currently
-	 * using, or `undefined` when no view is holding a reference. Set
-	 * when the first {@link acquire} runs; cleared when the last
-	 * reference is released.
-	 */
-	readonly proxyId: string | undefined;
-	/** Current resolved tunnel proxy info, or `undefined` if not started/no remote. */
+	/** Current tunnel proxy info, or `undefined` while no view holds one. */
 	readonly proxy: ITunnelProxyInfo | undefined;
 	/**
-	 * Resolves once the tunnel proxy (if any) has been started and
-	 * applied to the Electron session, so callers can defer navigation
-	 * until requests will flow through the proxy. Resolves immediately
-	 * for non-remote sessions or when no start is in flight.
+	 * Resolves once the tunnel proxy (if any) has been applied to the
+	 * Electron session, so callers can defer navigation until requests
+	 * will flow through the proxy. Resolves immediately for sessions
+	 * without a proxy.
 	 */
 	readonly whenReady: Promise<void>;
 	/**
-	 * Acquire a reference to the shared-process tunnel proxy on behalf
-	 * of {@link viewId}. Starts the proxy on the first reference and
-	 * applies the resolved proxy info to the Electron session. Safe to
-	 * call multiple times with the same {@link viewId} (idempotent).
-	 * No-op when {@link proxyId} is `undefined` (non-remote view).
+	 * Hold {@link proxyInfo} on behalf of {@link viewId} and apply it to the
+	 * Electron session. Calling again for the same view replaces its proxy
+	 * (e.g. after its window's extension host restarted).
 	 */
-	acquire(viewId: string, proxyId: string | undefined): Promise<void>;
+	acquire(viewId: string, proxyInfo: ITunnelProxyInfo): void;
 	/**
-	 * Release the reference acquired for {@link viewId}. Stops the
-	 * proxy and resets the Electron session when the last reference
-	 * is released. No-op for unknown viewIds.
+	 * Release the proxy held for {@link viewId}. When other views still hold
+	 * a different proxy, switches to one of theirs; clears the proxy and
+	 * resets the Electron session when the last view releases. No-op for
+	 * unknown viewIds.
 	 */
 	release(viewId: string): void;
 }
 
 /**
- * Owns the tunnel-proxy lifecycle for a {@link BrowserSession}: tracks
- * which views are using the session, starts the shared-process tunnel
- * proxy on first use, applies the proxy URL/credentials to the
- * underlying Electron session, and stops the proxy when no view is
- * using it anymore.
+ * Owns the tunnel-proxy lifecycle for a {@link BrowserSession} bound to a
+ * remote network: tracks which views use the session and the proxy each was
+ * given, applies a proxy to the underlying Electron session, and clears it
+ * when no view uses it anymore.
  *
- * One instance per {@link BrowserSession}. The {@link proxyId} is
- * supplied per {@link acquire} call rather than at construction so that
- * a session reused across windows (e.g. the same workspace opened in a
- * second window after the first was closed) picks up the new window's
- * proxy id instead of a stale one cached at construction time.
- *
- * If a second window acquires the same session while the first is
- * still holding a reference, the first window's proxy id wins for the
- * duration; the second window's traffic flows through the existing
- * proxy. That's a known limitation of sharing sessions across windows.
+ * One instance per {@link BrowserSession}. Proxy info is supplied per
+ * {@link acquire} call rather than at construction because a session can be
+ * shared by views of several windows, each with its own local proxy server.
+ * The most recently acquired proxy is applied; when its last view goes away,
+ * a proxy still held by another view takes over. A view never releases its
+ * proxy without closing, so the session never falls back to the local network.
  */
 export class BrowserSessionRemote implements IBrowserSessionRemote {
 
 	private _proxy: ITunnelProxyInfo | undefined;
-	private _activeProxyId: string | undefined;
-	private _startPromise: Promise<void> | undefined;
+	private _readyPromise: Promise<void> = Promise.resolve();
 
-	/**
-	 * Live references: viewId → the proxy id that view was acquired
-	 * with. Stored so {@link release} can find the right id to stop
-	 * without the caller having to remember it.
-	 */
-	private readonly _viewIds = new Map<string, string>();
-
-	private readonly _onDidStart = new Emitter<void>();
-	readonly onDidStart: Event<void> = this._onDidStart.event;
-
-	private readonly _onDidStop = new Emitter<void>();
-	readonly onDidStop: Event<void> = this._onDidStop.event;
+	/** Proxy given to each live view; the proxy is cleared when this is empty. */
+	private readonly _viewProxies = new Map<string, ITunnelProxyInfo>();
 
 	constructor(
 		private readonly _session: BrowserSession,
-		private readonly _tunnelService: ISharedProcessTunnelProxyService,
-		private readonly _logService: ILogService,
 	) {
-	}
-
-	get proxyId(): string | undefined {
-		return this._activeProxyId;
 	}
 
 	get proxy(): ITunnelProxyInfo | undefined {
@@ -111,88 +67,48 @@ export class BrowserSessionRemote implements IBrowserSessionRemote {
 	}
 
 	get whenReady(): Promise<void> {
-		return this._startPromise ? this._startPromise.then(() => undefined) : Promise.resolve();
+		return this._readyPromise;
 	}
 
-	async acquire(viewId: string, proxyId: string | undefined): Promise<void> {
-		if (!proxyId || this._session.storageScope === BrowserViewStorageScope.Global) {
-			return this.release(viewId);
-		}
-
-		// Idempotent per viewId: subsequent acquires just await the
-		// in-flight start (if any) so the session is fully configured
-		// before the caller proceeds.
-		if (this._viewIds.has(viewId)) {
-			if (this._startPromise) {
-				await this._startPromise;
-			}
-			return;
-		}
-
-		// First acquire after the session is idle picks the active id;
-		// concurrent acquires with a mismatched id (cross-window reuse
-		// of a shared session) stay with the existing one.
-		if (this._activeProxyId === undefined) {
-			this._activeProxyId = proxyId;
-		} else if (this._activeProxyId !== proxyId) {
-			this._logService.warn(`[BrowserSessionRemote] Session '${this._session.id}' is shared across windows; staying with proxy '${this._activeProxyId}' (ignoring '${proxyId}').`);
-		}
-
-		const activeProxyId = this._activeProxyId;
-		this._viewIds.set(viewId, activeProxyId);
-
-		if (!this._startPromise) {
-			const startPromise: Promise<void> = this._tunnelService.start(activeProxyId).then((proxy) => {
-				// Apply the resolved proxy to the Electron session once, as long
-				// as a view is still using it. Folding the apply into the start
-				// chain guarantees `whenReady` only resolves after `setProxy` ran.
-				if (this._viewIds.size > 0 && !sameProxyInfo(this._proxy, proxy)) {
-					this._proxy = proxy;
-					this._applyProxy();
-					this._onDidStart.fire();
-				}
-			}).catch(err => {
-				this._logService.error(`[BrowserSessionRemote] Failed to start tunnel proxy '${activeProxyId}':`, err);
-				// Reset so the next acquire retries from scratch.
-				if (this._startPromise === startPromise) {
-					this._startPromise = undefined;
-					this._viewIds.clear();
-					this._activeProxyId = undefined;
-					this._onDidStop.fire();
-				}
-			});
-			this._startPromise = startPromise;
-		}
-
-		return this._startPromise;
+	acquire(viewId: string, proxyInfo: ITunnelProxyInfo): void {
+		this._viewProxies.set(viewId, proxyInfo);
+		this._setProxy(proxyInfo);
 	}
 
 	release(viewId: string): void {
-		const releasedProxyId = this._viewIds.get(viewId);
-		if (releasedProxyId === undefined || !this._viewIds.delete(viewId)) {
+		if (!this._viewProxies.delete(viewId)) {
 			return;
 		}
-		if (this._viewIds.size === 0) {
-			void this._tunnelService.stop(releasedProxyId);
-			this._activeProxyId = undefined;
-			this._startPromise = undefined;
-			if (this._proxy) {
-				this._proxy = undefined;
-				this._applyProxy();
-			}
-			this._onDidStop.fire();
+		const remaining = [...this._viewProxies.values()];
+		if (remaining.length === 0) {
+			this._setProxy(undefined);
+		} else if (!remaining.some(info => sameProxyInfo(info, this._proxy))) {
+			this._setProxy(remaining[remaining.length - 1]);
 		}
 	}
 
-	private _applyProxy(): void {
-		if (this._proxy) {
-			this._session.electronSession.setProxy({
-				proxyRules: this._proxy.url,
+	private _setProxy(info: ITunnelProxyInfo | undefined): void {
+		if (sameProxyInfo(this._proxy, info)) {
+			return;
+		}
+		this._proxy = info;
+		// Serialize applies so an older, slower apply can never win.
+		const apply = () => this._applyProxy(info);
+		this._readyPromise = this._readyPromise.then(apply, apply);
+	}
+
+	private async _applyProxy(info: ITunnelProxyInfo | undefined): Promise<void> {
+		const electronSession = this._session.electronSession;
+		if (info) {
+			await electronSession.setProxy({
+				proxyRules: info.url,
 				proxyBypassRules: '<-loopback>'
 			});
 		} else {
-			this._session.electronSession.setProxy({ mode: 'direct' });
+			await electronSession.setProxy({ mode: 'direct' });
 		}
+		// Pooled sockets would otherwise keep using the previous proxy.
+		await electronSession.closeAllConnections();
 	}
 }
 

@@ -6,13 +6,13 @@
 import { ServiceCollection } from '../../platform/instantiation/common/serviceCollection.js';
 import { ILogService } from '../../platform/log/common/log.js';
 import { IBrowserMainWorkbench } from '../../workbench/browser/web.main.js';
-import { Workbench as SessionsWorkbench } from '../browser/workbench.js';
+import { DesktopWorkbench as SessionsWorkbench } from '../browser/desktopWorkbench.js';
 import { SessionsBrowserMain } from '../browser/web.main.js';
 import { Emitter, Event } from '../../base/common/event.js';
 import { CancellationToken } from '../../base/common/cancellation.js';
 import { IObservable, observableValue } from '../../base/common/observable.js';
 import { ChatEntitlement, IChatEntitlementService, IChatSentiment } from '../../workbench/services/chat/common/chatEntitlementService.js';
-import { IDefaultAccountService } from '../../platform/defaultAccount/common/defaultAccount.js';
+import { IDefaultAccountService, MANAGED_SETTINGS_FRESHNESS_NOT_REQUIRED } from '../../platform/defaultAccount/common/defaultAccount.js';
 import { IDefaultAccount, IDefaultAccountAuthenticationProvider, ICopilotTokenInfo, IPolicyData } from '../../base/common/defaultAccount.js';
 import { IChatAgentService, IChatAgentData, IChatAgentImplementation } from '../../workbench/contrib/chat/common/participants/chatAgents.js';
 import { ChatAgentLocation, ChatModeKind } from '../../workbench/contrib/chat/common/constants.js';
@@ -22,7 +22,7 @@ import { URI } from '../../base/common/uri.js';
 import { Disposable } from '../../base/common/lifecycle.js';
 import { IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase } from '../../workbench/common/contributions.js';
 import { IChatProgress } from '../../workbench/contrib/chat/common/chatService/chatService.js';
-import { IChatSessionsService, IChatSessionItem, IChatSessionFileChange, ChatSessionStatus, IChatSessionHistoryItem, IChatSessionItemsDelta } from '../../workbench/contrib/chat/common/chatSessionsService.js';
+import { IChatSessionsService, IChatSessionItem, ChatSessionStatus, IChatSessionHistoryItem, IChatSessionItemsDelta } from '../../workbench/contrib/chat/common/chatSessionsService.js';
 import { IGitService, IGitExtensionDelegate, IGitRepository } from '../../workbench/contrib/git/common/gitService.js';
 import { IFileService } from '../../platform/files/common/files.js';
 import { ITerminalService } from '../../workbench/contrib/terminal/browser/terminal.js';
@@ -36,6 +36,7 @@ import { getSingletonServiceDescriptors } from '../../platform/instantiation/com
 import { ServiceIdentifier } from '../../platform/instantiation/common/instantiation.js';
 import { IWorkbench } from '../../workbench/browser/web.api.js';
 import { isEqual } from '../../base/common/resources.js';
+import { IChatSessionFileChange } from '../../workbench/common/chatSessionFileChange.js';
 
 /**
  * Mock files pre-seeded in the in-memory file system. These match the
@@ -93,7 +94,6 @@ class MockChatEntitlementService implements IChatEntitlementService {
 	readonly entitlement = ChatEntitlement.Free;
 	readonly entitlementObs: IObservable<ChatEntitlement> = observableValue('entitlement', ChatEntitlement.Free);
 
-	readonly previewFeaturesDisabled = false;
 	readonly clientByokEnabled = false;
 	readonly hasByokModels = false;
 	readonly organisations: string[] | undefined = undefined;
@@ -133,6 +133,11 @@ class MockDefaultAccountService implements IDefaultAccountService {
 	readonly onDidChangeCopilotTokenInfo = Event.None;
 	readonly managedSettingsFetchStatus: null = null;
 	readonly managedSettingsFetchedAt: null = null;
+	readonly managedSettingsRawResponse: unknown = null;
+	readonly managedSettingsCompatibilityError = null;
+	readonly onDidChangeManagedSettingsCompatibilityError = Event.None;
+	readonly managedSettingsFreshness = MANAGED_SETTINGS_FRESHNESS_NOT_REQUIRED;
+	readonly onDidChangeManagedSettingsFreshness = Event.None;
 
 	async getDefaultAccount(): Promise<IDefaultAccount | null> { return MOCK_ACCOUNT; }
 	getDefaultAccountAuthenticationProvider(): IDefaultAccountAuthenticationProvider { return MOCK_ACCOUNT.authenticationProvider; }

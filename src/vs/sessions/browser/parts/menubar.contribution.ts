@@ -6,7 +6,7 @@
 import { localize } from '../../../nls.js';
 import { MenuId, MenuRegistry } from '../../../platform/actions/common/actions.js';
 import { IsMacNativeContext } from '../../../platform/contextkey/common/contextkeys.js';
-import { Menus } from '../menus.js';
+import { AgentsWindowMenus } from '../agentsWindowMenus.js';
 
 MenuRegistry.appendMenuItem(MenuId.MenubarMainMenu, {
 	submenu: MenuId.MenubarFileMenu,
@@ -29,6 +29,16 @@ MenuRegistry.appendMenuItem(MenuId.MenubarMainMenu, {
 });
 
 MenuRegistry.appendMenuItem(MenuId.MenubarMainMenu, {
+	submenu: MenuId.MenubarSelectionMenu,
+	title: {
+		value: 'Selection',
+		original: 'Selection',
+		mnemonicTitle: localize({ key: 'mSelection', comment: ['&& denotes a mnemonic'] }, "&&Selection")
+	},
+	order: 3
+});
+
+MenuRegistry.appendMenuItem(MenuId.MenubarMainMenu, {
 	submenu: MenuId.MenubarViewMenu,
 	title: {
 		value: 'View',
@@ -39,7 +49,7 @@ MenuRegistry.appendMenuItem(MenuId.MenubarMainMenu, {
 });
 
 MenuRegistry.appendMenuItem(MenuId.MenubarMainMenu, {
-	submenu: Menus.GoMenu,
+	submenu: AgentsWindowMenus.GoMenu,
 	title: {
 		value: 'Go',
 		original: 'Go',
