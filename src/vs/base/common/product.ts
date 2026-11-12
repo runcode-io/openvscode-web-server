@@ -228,6 +228,8 @@ export interface IProductConfiguration {
 	readonly licenseUrl?: string;
 	readonly serverLicenseUrl?: string;
 	readonly privacyStatementUrl?: string;
+	/** Product website, linked from the browser About dialog when set. */
+	readonly websiteUrl?: string;
 	readonly showTelemetryOptOut?: boolean;
 
 	readonly serverGreeting?: string[];

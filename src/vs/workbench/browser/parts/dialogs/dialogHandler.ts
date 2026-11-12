@@ -3,10 +3,13 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import './media/dialog.css';
 import { localize } from '../../../../nls.js';
 import { CancellationToken } from '../../../../base/common/cancellation.js';
 import { IConfirmation, IConfirmationResult, IInputResult, ICheckbox, IInputElement, ICustomDialogOptions, IInput, AbstractDialogHandler, DialogType, IPrompt, IAsyncPromptResult } from '../../../../platform/dialogs/common/dialogs.js';
-import { IMarkdownString } from '../../../../base/common/htmlContent.js';
+import { IMarkdownString, MarkdownString } from '../../../../base/common/htmlContent.js';
+import { URI } from '../../../../base/common/uri.js';
+import { IProductService } from '../../../../platform/product/common/productService.js';
 import { ILayoutService } from '../../../../platform/layout/browser/layoutService.js';
 import { ILogService } from '../../../../platform/log/common/log.js';
 import Severity from '../../../../base/common/severity.js';
@@ -40,6 +43,7 @@ export class BrowserDialogHandler extends AbstractDialogHandler {
 		@IOpenerService private readonly openerService: IOpenerService,
 		@IMarkdownRendererService private readonly markdownRendererService: IMarkdownRendererService,
 		@IHostService private readonly hostService: IHostService,
+		@IProductService private readonly productService: IProductService,
 	) {
 		super();
 	}
@@ -75,6 +79,7 @@ export class BrowserDialogHandler extends AbstractDialogHandler {
 	}
 
 	async about(title: string, details: string, detailsToCopy: string): Promise<void> {
+		const websiteUrl = this.productService.websiteUrl;
 
 		const { button } = await this.doShow(
 			Severity.Info,
@@ -84,7 +89,14 @@ export class BrowserDialogHandler extends AbstractDialogHandler {
 				localize('ok', "OK")
 			],
 			details,
-			1
+			1,
+			undefined,
+			undefined,
+			{
+				// `about-dialog` swaps the generic info icon for the product icon, see ./media/dialog.css.
+				classes: ['about-dialog'],
+				markdownDetails: websiteUrl ? [{ markdown: new MarkdownString(`[${URI.parse(websiteUrl).authority}](${websiteUrl})`) }] : undefined
+			}
 		);
 
 		if (button === 0) {

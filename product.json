@@ -7,6 +7,7 @@
 	"licenseName": "MIT",
 	"licenseUrl": "https://github.com/runcode-io/openvscode-web-server/blob/main/LICENSE.txt",
 	"serverLicenseUrl": "https://github.com/runcode-io/openvscode-web-server/blob/main/LICENSE.txt",
+	"websiteUrl": "https://runcode.io",
 	"serverGreeting": [],
 	"serverLicense": [],
 	"serverLicensePrompt": "",

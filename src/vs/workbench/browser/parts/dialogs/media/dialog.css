@@ -1,0 +1,13 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+/* About dialog: show the product icon in place of the generic info icon. */
+.monaco-dialog-box .dialog-message-row:has(.about-dialog) > .dialog-icon {
+	background: url('../../../media/code-icon.svg') center / contain no-repeat;
+}
+
+.monaco-dialog-box .dialog-message-row:has(.about-dialog) > .dialog-icon::before {
+	content: none;
+}
